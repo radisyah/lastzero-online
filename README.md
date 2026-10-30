@@ -34,7 +34,7 @@ Aturan online:
 Bila Redis belum terhubung, API membalas: *"Database belum dikonfigurasi…"*.
 
 ## Tampilan layar pemain di Master (WebRTC) dan TURN
-Tiap pemain menyiarkan **video kanvas game** (640×360, ±12 fps, ≤800 kbps, dengan HUD ringkas: HP, peluru, skor, sisa waktu) langsung ke Master lewat WebRTC.
+Tiap pemain menyiarkan **salinan layarnya** (resolusi & fps sesuai pilihan **Siaran**, lihat bagian Performa) langsung ke Master lewat WebRTC.
 Master menawar (offer), pemain menjawab (answer); server hanya menukar pesan sinyal lewat Redis (long-poll `GET /api/room?action=sig`).
 Berbeda dari mode "data posisi" di treasure-online, LASTZERO memakai video karena dunianya penuh sinematik, pintu, dan efek yang sulit direplika di sisi Master;
 dengan video, Master melihat persis apa yang dilihat pemain.
@@ -47,6 +47,12 @@ Koneksi mencoba P2P dulu; bila belum tersambung dalam ±9 dtk, Master memaksa re
 Tips: kualitas siaran bergantung pada jaringan & CPU HP pemain. Tab pemain yang disembunyikan membuat browser menghentikan render → video membeku sampai tab dibuka lagi.
 Android: game masuk layar penuh saat pemain menekan SIAP. Desktop: klik layar saat hitung mundur untuk mengunci mouse.
 
+
+## Tampilan di Master = tampilan di pemain
+Siaran bukan hanya kanvas 3D: kanvas disalin **penuh dengan rasio layar asli pemain** (HP 20:9, laptop 16:9, dst., tanpa dipotong), lalu semua elemen
+yang tampil di layar pemain digambar ulang di atasnya memakai posisi dan gaya CSS yang sama: HUD (HP, stamina, peluru, terkumpul/salah, hit/miss/akurasi,
+bar zombie, status bahaya), minimap, peta penuh, notifikasi, petunjuk panah, teks & bar sinematik, efek luka/vignette/flash, tombol sentuh, dan menu pause.
+Pengecualian: kursor mouse, bayangan kotak (box-shadow), dan filter blur tidak ikut tergambar.
 
 ## Performa & 60 FPS di layar Master
 Master tidak merender dunia 3D; ia hanya memutar 4 video. Jadi fps tampilan ditentukan oleh **siaran tiap pemain**, bukan laptop Master.
@@ -68,7 +74,7 @@ Pada AMD Ryzen 5 5625U decode 4 video 540p60 ditangani GPU Radeon dengan beban r
 ## Lokal & tes
 ```bash
 node dev-server.js     # http://localhost:3000 (penyimpanan memori, hanya untuk pengembangan)
-npm test               # 7 tes ICE/TURN + 24 tes API (memori & jalur Redis REST) + 8 tes alur klien (Master + 2 pemain)
+npm test               # 7 tes ICE/TURN + 24 tes API (memori & jalur Redis REST) + 10 tes klien (alur Master + 2 pemain, pemroses gradient, penggambaran DOM) (Master + 2 pemain)
 ```
 `test/client.test.js` menjalankan modul klien online yang sama dengan di `public/index.html` melawan server sungguhan (DOM/game diganti stub).
 Siaran video WebRTC dan tampilan 3D hanya bisa diuji di browser sungguhan.

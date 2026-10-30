@@ -24,6 +24,7 @@ function device(name) {
   const store = {};
   const durBtns = [5, 10, 15].map(d => { const b = stubEl(); b.dataset.d = String(d); return b; });
   const doc = { hidden: false, activeElement: null, body: stubEl(), createElement: () => stubEl(), addEventListener() { },
+    createRange: () => ({ selectNodeContents(n) { this.n = n; }, getClientRects() { return this.n.__rects || []; } }),
     querySelectorAll: sel => sel === '#lbDur button' ? durBtns : [] };
   const gameState = { status: 'MENU', mission: 1, score: 0, time: 0, missionT0: 0, playerHP: 100, ammo: 0, zombieHP: 100, shotsHit: 0, shotsMissed: 0, totalWrong: 0, missionBullets: 0, cause: '', mission_: 1 };
   const MISSIONS = [1, 2, 3].map(i => ({ id: i, name: 'M' + i, place: 'Tempat ' + i, short: 'T' + i }));
@@ -57,6 +58,44 @@ const until = async (fn, ms = 8000, msg = 'timeout') => { const t0 = Date.now();
   const all = [M, A, B];
   let code5;
 
+  await T('pemroses gradient CSS (bar HP, vignette) & pemecah argumen', async () => {
+    const N = device('g').NET;
+    assert.deepStrictEqual(N.splitTop('rgba(0, 0, 0, 0) 35%, rgba(150, 0, 0, 0.95) 100%'), ['rgba(0, 0, 0, 0) 35%', 'rgba(150, 0, 0, 0.95) 100%']);
+    let g = N.parseGrad('linear-gradient(90deg, rgb(122, 13, 13), rgb(214, 34, 34))');
+    assert(g.kind === 'linear' && g.angle === 90 && g.stops.length === 2 && g.stops[0].pos === 0 && g.stops[1].pos === 1 && g.stops[1].color === 'rgb(214, 34, 34)');
+    g = N.parseGrad('radial-gradient(rgba(0, 0, 0, 0) 35%, rgba(150, 0, 0, 0.95) 100%)');
+    assert(g.kind === 'radial' && g.stops[0].pos === 0.35 && g.stops[1].pos === 1);
+    g = N.parseGrad('radial-gradient(ellipse at center, rgba(255, 0, 0, 0.35), rgba(200, 0, 0, 0.85))');
+    assert(g.kind === 'radial' && g.stops.length === 2 && g.stops[0].pos === 0 && g.stops[1].pos === 1);
+    g = N.parseGrad('linear-gradient(to right, red, blue, lime)');
+    assert(g.angle === 90 && g.stops[1].pos === 0.5);
+    assert.strictEqual(N.parseGrad('none'), null);
+  });
+  await T('drawDom menggambar kotak, bar gradient, teks (+tegak lurus posisi), kanvas, dan melewati elemen tersembunyi', async () => {
+    const N = device('d').NET, calls = [];
+    const ctx = new Proxy({}, { get: (t, k) => k in t ? t[k] : (...a) => { calls.push([k, ...a]); return { addColorStop() { } }; }, set: (t, k, v) => { t[k] = v; if (['fillStyle', 'font'].includes(k)) calls.push(['set:' + k, v]); return true; } });
+    const cs = (o) => Object.assign({ display: 'block', visibility: 'visible', opacity: '1', backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', borderTopWidth: '0px', borderTopStyle: 'none', borderTopColor: 'rgba(0, 0, 0, 0)', borderTopLeftRadius: '0px', color: 'rgb(241, 230, 194)', fontStyle: 'normal', fontWeight: '700', fontSize: '20px', fontFamily: '"Courier New", monospace', letterSpacing: 'normal', textShadow: 'none', whiteSpace: 'normal', textTransform: 'none', mixBlendMode: 'normal', imageRendering: 'auto' }, o);
+    const rect = (l, t, w, h) => ({ left: l, top: t, width: w, height: h });
+    const text = (str, r) => ({ nodeType: 3, nodeValue: str, __rects: [r] });
+    const bar = { tagName: 'I', childNodes: [], children: [], _cs: cs({ backgroundImage: 'linear-gradient(90deg, rgb(122, 13, 13), rgb(214, 34, 34))' }), _r: rect(10, 40, 80, 12) };
+    const hp = { tagName: 'DIV', childNodes: [text('100 / 100', rect(10, 10, 90, 22))], children: [], _cs: cs({}), _r: rect(10, 10, 90, 22) };
+    const hidden = { tagName: 'DIV', childNodes: [text('RAHASIA', rect(0, 0, 50, 10))], children: [], _cs: cs({ display: 'none' }), _r: rect(0, 0, 50, 10) };
+    const faded = { tagName: 'DIV', childNodes: [], children: [], _cs: cs({ opacity: '0', backgroundColor: 'rgb(200, 0, 0)' }), _r: rect(0, 0, 500, 500) };
+    const mm = { tagName: 'CANVAS', childNodes: [], children: [], _cs: cs({}), _r: rect(5, 60, 100, 100) };
+    const root = { tagName: 'DIV', childNodes: [], children: [hp, bar, hidden, faded, mm], _cs: cs({ backgroundColor: 'rgba(0, 0, 0, 0.6)', borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: 'rgb(90, 26, 26)' }), _r: rect(0, 0, 320, 200) };
+    const all = [root, hp, bar, hidden, faded, mm];
+    all.forEach(e => { e.getBoundingClientRect = () => e._r; });
+    global.getComputedStyle = e => e._cs;
+    N.drawDom(ctx, root, 1);
+    const names = calls.map(c => c[0]);
+    assert(names.includes('fill') && names.includes('stroke'), 'kotak latar + border harus digambar');
+    assert(names.includes('createLinearGradient'), 'bar HP harus bergradien');
+    const ft = calls.filter(c => c[0] === 'fillText'); assert.strictEqual(ft.length, 1, 'hanya satu teks (yang tersembunyi diabaikan): ' + JSON.stringify(ft));
+    assert.deepStrictEqual(ft[0].slice(1), ['100 / 100', 10, 21], 'teks digambar di posisi rect aslinya');
+    assert(calls.some(c => c[0] === 'drawImage' && c[2] === 5 && c[3] === 60 && c[4] === 100), 'minimap (canvas) harus disalin');
+    assert(!calls.some(c => c[0] === 'set:fillStyle' && c[1] === 'rgb(200, 0, 0)'), 'elemen opacity 0 tidak digambar');
+    delete global.getComputedStyle;
+  });
   await T('Master membuat room → lobi, tampil kode 5 karakter, status SPECTATE (tidak merender 3D)', async () => {
     M.$('njName').value = 'Guru'; await M.NET.begin('create');
     code5 = M.NET.on.code; assert(/^[A-Z0-9]{5}$/.test(code5));
@@ -94,8 +133,8 @@ const until = async (fn, ms = 8000, msg = 'timeout') => { const t0 = Date.now();
     assert.deepStrictEqual(A.log.missions[0], { online: true, seed: A.log.reset[0].seed });
     assert(A.NET.live && B.NET.live);
     A.gameState.score = 700; A.gameState.playerHP = 64; A.gameState.ammo = 4;
-    await A.NET.sendStat();
-    await until(() => M.NET.room.stats && M.NET.room.stats['2'] && M.NET.room.stats['2'].score === 700, 6000, 'statistik tidak sampai');
+    // setInterval di-stub pada tes ini, jadi kirim ulang sampai Master menerima (di game asli ada pengiriman berkala tiap 2 dtk)
+    await until(async () => { await A.NET.sendStat(); return M.NET.room.stats && M.NET.room.stats['2'] && M.NET.room.stats['2'].score === 700; }, 8000, 'statistik tidak sampai');
     await until(() => /SKOR 700/.test(M.NET.tiles[0].st.textContent), 4000, 'tile Master tidak menampilkan statistik');
     assert(/HP 64/.test(M.NET.tiles[0].st.textContent) && /PELURU 4/.test(M.NET.tiles[0].st.textContent));
     assert.strictEqual(M.NET.tiles[0].nm.textContent, 'Ayu');
