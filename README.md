@@ -47,6 +47,24 @@ Koneksi mencoba P2P dulu; bila belum tersambung dalam ±9 dtk, Master memaksa re
 Tips: kualitas siaran bergantung pada jaringan & CPU HP pemain. Tab pemain yang disembunyikan membuat browser menghentikan render → video membeku sampai tab dibuka lagi.
 Android: game masuk layar penuh saat pemain menekan SIAP. Desktop: klik layar saat hitung mundur untuk mengunci mouse.
 
+
+## Performa & 60 FPS di layar Master
+Master tidak merender dunia 3D; ia hanya memutar 4 video. Jadi fps tampilan ditentukan oleh **siaran tiap pemain**, bukan laptop Master.
+Room Master memilih **Siaran** di lobi:
+
+| Pilihan | Resolusi | FPS | Bitrate | Cocok untuk |
+|---|---|---|---|---|
+| HEMAT | 640×360 | 15 | 0,8 Mbps | HP lama / jaringan lemah |
+| SEIMBANG (bawaan) | 854×480 | 30 | 2,2 Mbps | HP menengah, wifi biasa |
+| 60 FPS | 960×540 | 60 | 4 Mbps | pemain di laptop/PC, wifi 5 GHz atau kabel |
+
+60 fps stabil butuh **semua pemain** punya CPU/GPU kuat dan upload ≥ 5 Mbps; HP Android biasanya hanya stabil di 30 fps.
+Mode 60 FPS lewat relay TURN memakai kuota ±1,8 GB per jam per pemain di layanan TURN Anda.
+
+Tips di laptop Master (Windows 11): colok charger dan pilih *Power mode → Best performance*; di Chrome/Edge aktifkan *Gunakan akselerasi perangkat keras*
+(`chrome://gpu` harus menunjukkan "Video Decode: Hardware accelerated"); tutup tab lain; gunakan wifi 5 GHz/kabel LAN; jangan buka DevTools.
+Pada AMD Ryzen 5 5625U decode 4 video 540p60 ditangani GPU Radeon dengan beban rendah.
+
 ## Lokal & tes
 ```bash
 node dev-server.js     # http://localhost:3000 (penyimpanan memori, hanya untuk pengembangan)

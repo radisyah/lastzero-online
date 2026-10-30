@@ -1425,6 +1425,14 @@
             ><button type="button" data-d="15">15 MENIT</button>
           </div>
         </div>
+        <div class="row mOnly">
+          <label style="margin: 0">Siaran</label>
+          <div class="seg" id="lbQual">
+            <button type="button" data-q="0">HEMAT</button
+            ><button type="button" data-q="1">SEIMBANG</button
+            ><button type="button" data-q="2">60 FPS</button>
+          </div>
+        </div>
         <div class="row pOnly"><label style="margin: 0">Misi</label><span id="lbMissionTxt"></span></div>
         <div class="row pOnly"><label style="margin: 0">Durasi</label><span id="lbDurTxt"></span></div>
         <div id="lbMsg" class="fb"></div>
@@ -11956,9 +11964,15 @@
               ],
               relay: false,
             },
-            VW: 640,
-            VH: 360,
-            VFPS: 12,
+            /* preset kualitas siaran (dipilih Room Master di lobi). 60 fps butuh perangkat pemain kuat + upload ±4 Mbps */
+            QUAL: [
+              { name: "HEMAT", w: 640, h: 360, fps: 15, kbps: 800 },
+              { name: "SEIMBANG", w: 854, h: 480, fps: 30, kbps: 2200 },
+              { name: "MAKSIMAL 60 FPS", w: 960, h: 540, fps: 60, kbps: 4000 },
+            ],
+            q() {
+              return this.QUAL[this.room && this.room.quality != null ? this.room.quality : 1] || this.QUAL[1];
+            },
             on: null,
             role: null,
             slot: 0,
@@ -12194,6 +12208,9 @@
               document.querySelectorAll("#lbDur button").forEach((b) => {
                 b.onclick = () =>
                   this.act("config", { duration: Number(b.dataset.d) });
+              });
+              document.querySelectorAll("#lbQual button").forEach((b) => {
+                b.onclick = () => this.act("config", { quality: Number(b.dataset.q) });
               });
               const ad = $("lbAddr");
               ad.onclick = () => {
@@ -12810,17 +12827,20 @@
                 this.feed = { stream: null };
                 return;
               }
-              const cv = document.createElement("canvas");
-              cv.width = this.VW;
-              cv.height = this.VH;
+              const q = this.q(),
+                cv = document.createElement("canvas");
+              cv.width = q.w;
+              cv.height = q.h;
               const ctx = cv.getContext("2d", { alpha: false });
               ctx.fillStyle = "#000";
               ctx.fillRect(0, 0, cv.width, cv.height);
               let stream = null;
               try {
-                stream = cv.captureStream(this.VFPS);
+                stream = cv.captureStream(q.fps);
+                const vt = stream.getVideoTracks()[0];
+                if (vt && "contentHint" in vt) vt.contentHint = "motion"; // utamakan kelancaran gerak, bukan ketajaman
               } catch (e) {}
-              this.feed = { cv, ctx, stream, last: 0 };
+              this.feed = { cv, ctx, stream, last: 0, w: q.w, h: q.h, fps: q.fps, kbps: q.kbps };
             },
             stopFeed() {
               this.offerLoop = null;
@@ -12843,12 +12863,13 @@
               const f = this.feed;
               if (!f || !f.stream || !netActive || !this.live) return;
               const now = performance.now();
-              if (now - f.last < 1000 / this.VFPS - 4) return;
+              if (now - f.last < 1000 / f.fps - 3) return;
               f.last = now;
               if (!dom.width || !dom.height) return;
               const c = f.ctx,
-                W = this.VW,
-                H = this.VH,
+                W = 640,
+                H = 360, // koordinat HUD virtual 640×360, diskalakan ke resolusi siaran
+                k = f.w / 640,
                 sa = dom.width / dom.height,
                 ta = W / H;
               let sx = 0,
@@ -12863,7 +12884,9 @@
                 sy = (dom.height - sh) / 2;
               }
               try {
-                c.drawImage(dom, sx, sy, sw, sh, 0, 0, W, H);
+                c.drawImage(dom, sx, sy, sw, sh, 0, 0, f.w, f.h);
+                c.save();
+                c.scale(k, k);
                 const gs = gameState;
                 c.fillStyle = "rgba(0,0,0,0.6)";
                 c.fillRect(0, H - 30, W, 30);
@@ -12897,6 +12920,7 @@
                   c.lineTo(W / 2, H / 2 + 7);
                   c.stroke();
                 }
+                c.restore();
               } catch (e) {
                 /* kanvas 3D belum siap: lewati frame ini */
               }
@@ -12965,9 +12989,10 @@
                   const pr = sn.getParameters();
                   pr.encodings =
                     pr.encodings && pr.encodings.length ? pr.encodings : [{}];
+                  const f = this.feed || this.q();
                   Object.assign(pr.encodings[0], {
-                    maxBitrate: 800000,
-                    maxFramerate: this.VFPS,
+                    maxBitrate: (f.kbps || 800) * 1000,
+                    maxFramerate: f.fps || 15,
                     scaleResolutionDownBy: 1,
                   });
                   pr.degradationPreference = "maintain-framerate";
@@ -13134,6 +13159,10 @@
                 });
               pc.addTransceiver("video", { direction: "recvonly" });
               pc.ontrack = (ev) => {
+                try {
+                  ev.receiver.jitterBufferTarget = 40; // ms: tunda tampilan sekecil mungkin
+                  ev.receiver.playoutDelayHint = 0.04;
+                } catch (e) {}
                 t.vid.srcObject =
                   (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
                 const pl = t.vid.play();
@@ -13334,6 +13363,10 @@
               $("lbMissionTxt").textContent = ms ? "Misi " + m.level + " — " + ms.name + " (" + ms.place + ")" : "";
               document.querySelectorAll("#lbDur button").forEach((b) => {
                 b.classList.toggle("on", Number(b.dataset.d) === m.duration);
+                b.disabled = !isM || !lobby;
+              });
+              document.querySelectorAll("#lbQual button").forEach((b) => {
+                b.classList.toggle("on", Number(b.dataset.q) === (m.quality == null ? 1 : m.quality));
                 b.disabled = !isM || !lobby;
               });
               sel.disabled = !lobby;

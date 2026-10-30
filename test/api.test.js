@@ -58,7 +58,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     r = await post('config', { code, token: M.token, duration: 7 }); assert(r.ok && r.room.duration === 5, 'durasi tak valid harus diabaikan');
     r = await post('config', { code, token: M.token, duration: 15 }); assert(r.ok && r.room.duration === 15 && r.room.level === 3);
     r = await post('config', { code, token: M.token, duration: 10, level: 2 }); assert(r.ok && r.room.duration === 10 && r.room.level === 2);
-    await post('config', { code, token: M.token, level: 3, duration: 10 });
+    r = await post('config', { code, token: M.token, quality: 2 }); assert(r.ok && r.room.quality === 2 && r.room.duration === 10);
+    r = await post('config', { code, token: M.token, quality: 9 }); assert(r.ok && r.room.quality === 2, 'kualitas di luar 0–2 dijepit');
+    await post('config', { code, token: M.token, level: 3, duration: 10, quality: 1 });
   });
   await T('mulai ditolak bila belum semua siap', async () => {
     const r = await post('start', { code, token: M.token }); assert.strictEqual(r.http, 400); assert(/siap/i.test(r.error));

@@ -89,7 +89,7 @@ function viewFor(room, seat, now, pres, stats) {
   pres = pres || {}; stats = stats || {};
   const isM = seat === 'master';
   const out = {
-    code: room.code, v: room.v, serverNow: now, phase: room.phase, level: room.level, duration: core.duration(room.duration), seed: room.seed || 0, roundNo: room.roundNo, goAt: room.goAt || 0,
+    code: room.code, v: room.v, serverNow: now, phase: room.phase, level: room.level, duration: core.duration(room.duration), quality: core.int(room.quality, 0, 2, 1), seed: room.seed || 0, roundNo: room.roundNo, goAt: room.goAt || 0,
     min: minPlayers(), abort: room.abort || null, closed: room.closed || null,
     role: isM ? 'master' : 'player', slot: isM ? 1 : seat,
     master: { name: room.master.name, online: !!pres.m },
@@ -155,7 +155,7 @@ async function actCreate(b) {
   for (let i = 0; i < 12; i++) {
     let code = ''; for (let k = 0; k < 5; k++) code += ALPHABET[crypto.randomInt(ALPHABET.length)];
     const room = {
-      code, v: 1, createdAt: now, phase: 'lobby', level: 1, duration: core.DURATIONS[0], seed: 0, roundNo: 0, goAt: 0, loadAt: 0, abort: null, closed: null,
+      code, v: 1, createdAt: now, phase: 'lobby', level: 1, duration: core.DURATIONS[0], quality: 1, seed: 0, roundNo: 0, goAt: 0, loadAt: 0, abort: null, closed: null,
       master: { token, name }, slots: [null, null, null, null], part: []
     };
     const ok = await store.cmd(['SET', roomKey(code), JSON.stringify(room), 'NX', 'EX', TTL]);
@@ -198,6 +198,7 @@ async function actConfig(b) {
     if (room.phase !== 'lobby') throw fail(409, 'Misi dan durasi hanya bisa diganti di lobby.');
     if (b.level !== undefined) room.level = core.int(b.level, 1, core.LEVELS, 1);
     if (b.duration !== undefined) room.duration = core.duration(b.duration, room.duration);
+    if (b.quality !== undefined) room.quality = core.int(b.quality, 0, 2, 1);
     return { room: viewFor(room, 'master', now, allOnline(), {}) };
   });
 }
